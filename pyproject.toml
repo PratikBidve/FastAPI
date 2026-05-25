@@ -1,0 +1,14 @@
+[project]
+name = "Practice"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "alembic>=1.18.4",
+    "fastapi[standard]>=0.136.3",
+    "httpx>=0.28.1",
+    "psycopg2-binary>=2.9.12",
+    "pytest>=9.0.3",
+    "sqlalchemy>=2.0.50",
+]
