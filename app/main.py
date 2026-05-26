@@ -1,12 +1,21 @@
 from fastapi import FastAPI
 from app.api.v1 import employees
 from app.core.config import settings
+from fastapi.middleware.cors import CORSMiddleware
 
 # Initialize the App with Metadata from Config
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     description="Enterprise Grade HCM API for ZingHR",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # In production, this would be ["https://hr.zinghr.com"]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
 )
 
 # Versioning: Mount the v1 router

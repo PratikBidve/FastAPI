@@ -1,13 +1,7 @@
 import enum
 from sqlalchemy import Column, String, Integer, Enum as SQLEnum, DateTime, func
 from app.db.database import Base
-
-
-class DepartmentEnum(str, enum.Enum):
-    ENGINEERING = "Engineering"
-    SALES = "Sales"
-    HR = "HR"
-
+from ..schemas.employee import DepartmentEnum
 
 class Employee(Base):
     __tablename__ = "employees"
