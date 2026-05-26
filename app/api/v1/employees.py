@@ -1,31 +1,48 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from app.api.dependencies import get_db
-from app.schemas.employee import EmployeeCreate, EmployeeResponse
-from app.db import models
+from typing import List
 import uuid
+
+from app.api.dependencies import get_db
+from app.schemas.employee import EmployeeCreate, EmployeeUpdate, EmployeeResponse
+from app.db import models
 
 router = APIRouter()
 
+
+# ---------------------------------------------------------------------------
+# POST /  — Create
+# ---------------------------------------------------------------------------
 @router.post("/", response_model=EmployeeResponse, status_code=status.HTTP_201_CREATED)
 def create_employee(employee: EmployeeCreate, db: Session = Depends(get_db)):
-    # 1. Check if email already exists (Enterprise data integrity)
-    existing_user = db.query(models.Employee).filter(models.Employee.email == employee.email).first()
-    if existing_user:
+    existing = db.query(models.Employee).filter(models.Employee.email == employee.email).first()
+    if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # 2. Map Pydantic to SQLAlchemy Model
-    new_emp = models.Employee(
-        id=str(uuid.uuid4()),
-        **employee.model_dump()
-    )
-    
-    # 3. Transaction Management: Atomic operations
+    new_emp = models.Employee(id=str(uuid.uuid4()), **employee.model_dump())
     db.add(new_emp)
     db.commit()
-    db.refresh(new_emp) # Get the newly generated ID back from DB
+    db.refresh(new_emp)
     return new_emp
 
+
+# ---------------------------------------------------------------------------
+# GET /  — List with pagination
+# ---------------------------------------------------------------------------
+@router.get("/", response_model=List[EmployeeResponse])
+def list_employees(
+    skip: int = Query(default=0, ge=0, description="Records to skip"),
+    limit: int = Query(default=10, ge=1, le=100, description="Max records to return"),
+    db: Session = Depends(get_db),
+):
+    """Paginated employee list. Use skip/limit for cursor-style pagination."""
+    employees = db.query(models.Employee).offset(skip).limit(limit).all()
+    return employees
+
+
+# ---------------------------------------------------------------------------
+# GET /{emp_id}  — Read single
+# ---------------------------------------------------------------------------
 @router.get("/{emp_id}", response_model=EmployeeResponse)
 def read_employee(emp_id: str, db: Session = Depends(get_db)):
     db_emp = db.query(models.Employee).filter(models.Employee.id == emp_id).first()
@@ -34,21 +51,50 @@ def read_employee(emp_id: str, db: Session = Depends(get_db)):
     return db_emp
 
 
-@router.delete("/{emp_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_employee(emp_id: str, db: Session = Depends(get_db)):
-    # 1. Fetch the record from the DB
+# ---------------------------------------------------------------------------
+# PUT /{emp_id}  — Update (partial fields supported)
+# ---------------------------------------------------------------------------
+@router.put("/{emp_id}", response_model=EmployeeResponse)
+def update_employee(emp_id: str, payload: EmployeeUpdate, db: Session = Depends(get_db)):
+    """Update one or more fields. Only provided (non-None) fields are changed."""
     db_emp = db.query(models.Employee).filter(models.Employee.id == emp_id).first()
-    
-    # 2. If it doesn't exist, 404 is the standard response
     if not db_emp:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Employee with ID {emp_id} not found"
+            detail=f"Employee with ID {emp_id} not found",
         )
-    
-    # 3. Perform the deletion
+
+    # If updating email, enforce uniqueness against other records
+    if payload.email and payload.email != db_emp.email:
+        conflict = (
+            db.query(models.Employee)
+            .filter(models.Employee.email == payload.email)
+            .first()
+        )
+        if conflict:
+            raise HTTPException(status_code=400, detail="Email already in use by another employee")
+
+    # Apply only the fields that were explicitly set in the request body
+    update_data = payload.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(db_emp, field, value)
+
+    db.commit()
+    db.refresh(db_emp)
+    return db_emp
+
+
+# ---------------------------------------------------------------------------
+# DELETE /{emp_id}  — Delete
+# ---------------------------------------------------------------------------
+@router.delete("/{emp_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_employee(emp_id: str, db: Session = Depends(get_db)):
+    db_emp = db.query(models.Employee).filter(models.Employee.id == emp_id).first()
+    if not db_emp:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Employee with ID {emp_id} not found",
+        )
     db.delete(db_emp)
     db.commit()
-    
-    # 4. Return None (204 No Content needs an empty body)
     return None

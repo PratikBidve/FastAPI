@@ -1,11 +1,13 @@
 import enum
-from sqlalchemy import Column, String, Integer, Enum as SQLEnum
+from sqlalchemy import Column, String, Integer, Enum as SQLEnum, DateTime, func
 from app.db.database import Base
+
 
 class DepartmentEnum(str, enum.Enum):
     ENGINEERING = "Engineering"
     SALES = "Sales"
     HR = "HR"
+
 
 class Employee(Base):
     __tablename__ = "employees"
@@ -15,3 +17,12 @@ class Employee(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     department = Column(SQLEnum(DepartmentEnum), nullable=False)
     salary = Column(Integer, nullable=False)
+
+    # Audit timestamps — server-side defaults, never set manually
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
